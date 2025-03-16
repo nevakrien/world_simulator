@@ -307,86 +307,92 @@ pub struct ClassMeta<'code>{
 
 
 impl<'code> ClassMeta<'code>{
-    pub fn new(reg:&impl TypeRegistery<'code>,id:ClassID,parents: HashSet<ClassID>,new_props:HashMap<&'code str,Property>)->Self{
-        let mut ans = ClassMeta{
+    pub fn new(reg: &impl TypeRegistery<'code>, id: ClassID, parents: HashSet<ClassID>, new_props: HashMap<&'code str, Property>) -> Self {
+        // Start with our own properties in accessible_properties
+        let mut ans = ClassMeta {
             ancestors: parents.clone(),
             parents,
-
-            accessble_properties:new_props,
-
+            accessble_properties: new_props,
             clashing_properties: HashMap::new(),
             shadowed_properties: HashMap::new(),
         };
 
-        for p in &ans.parents{
-            let p = reg.get_class(*p).unwrap();
+        // Process properties from parents
+        for parent_id in &ans.parents {
+            let parent = reg.get_class(*parent_id).unwrap();
 
-            ans.ancestors.extend(p.ancestors.clone());
+            // Add parent's ancestors to our ancestors
+            ans.ancestors.extend(parent.ancestors.clone());
 
-            //once something is shadowed its allways shadowed
-            for (k,v) in &p.shadowed_properties{
+            // First, inherit shadowed properties from parent
+            for (k, v) in &parent.shadowed_properties {
                 ans.shadowed_properties
-                .entry(k)
-                .or_default()
-                .extend(v);
+                    .entry(k)
+                    .or_default()
+                    .extend(v);
             }
 
-            //clashing might be downgraded to shadowed
-            for (k,v) in &p.clashing_properties{
-                match ans.accessble_properties.entry(k){
-                    Entry::Occupied(entry) => {
-                        if entry.get().id==id {
-                            ans.shadowed_properties
-                            .entry(k)
-                            .or_default()
-                            .extend(v);
-                        } else{
-                            //if we found another property we clash with bump it out
-                            let (_,other) = entry.remove_entry();
-                            let s = ans.clashing_properties
-                            .entry(k)
-                            .or_default();
-                            
-                            s.extend(v);
-                            s.insert(other);
-                        }
-                    },
-                    Entry::Vacant(_) => {
-                        ans.clashing_properties
+            // Handle clashing properties from parent
+            for (k, v) in &parent.clashing_properties {
+                // If we define our own property with the same name, shadow the clash
+                if ans.accessble_properties.contains_key(k) && ans.accessble_properties.get(k).unwrap().source == id {
+                    // Our own property shadows the clashing properties
+                    ans.shadowed_properties
                         .entry(k)
                         .or_default()
                         .extend(v);
-                    } 
+                } else {
+                    // Otherwise inherit the clash
+                    ans.clashing_properties
+                        .entry(k)
+                        .or_default()
+                        .extend(v);
                 }
             }
 
-            //accible might clash or downgrade
-            for (k,v) in &p.accessble_properties{
+            // Handle accessible properties from parent
+            for (k, v) in &parent.accessble_properties {
+                // Check if we already have a property with this name
                 match ans.accessble_properties.entry(k) {
                     Entry::Occupied(entry) => {
-                        let other_id = entry.get().id;
-                        if  other_id==id {
+                        let current_prop = entry.get();
+                        
+                        // If our class defines this property, shadow the parent's property
+                        if current_prop.source == id {
                             ans.shadowed_properties
-                            .entry(k)
-                            .or_default()
-                            .insert(*v);
-                        } else if v.source==other_id {
-                                continue; //its the same entry so we are good
-                        }else{
-                            //if we found another property we clash with bump it out
-                            let (_,other) = entry.remove_entry();
-                            let s = ans.clashing_properties
-                            .entry(k)
-                            .or_default();
+                                .entry(k)
+                                .or_default()
+                                .insert(*v);
+                        } 
+                        // If the property is from the same source, it's the same property via different paths
+                        else if current_prop.source == v.source {
+                            continue; // Same property, no action needed
+                        } 
+                        // Otherwise, we have a clash between different sources
+                        else {
+                            // Remove from accessible and add to clashing
+                            let (_, removed_prop) = entry.remove_entry();
+                            let clashing = ans.clashing_properties
+                                .entry(k)
+                                .or_default();
                             
-                            s.insert(*v);
-                            s.insert(other);
+                            clashing.insert(*v);
+                            clashing.insert(removed_prop);
                         }
                     },
-                    Entry::Vacant(spot) => {
-                        spot.insert(v.clone());
-                    } 
-                };
+                    Entry::Vacant(entry) => {
+                        // If we have clashing properties with this name already, add to clash
+                        if ans.clashing_properties.contains_key(k) {
+                            ans.clashing_properties
+                                .entry(k)
+                                .or_default()
+                                .insert(*v);
+                        } else {
+                            // Otherwise, inherit the property
+                            entry.insert(*v);
+                        }
+                    }
+                }
             }
         }
 
