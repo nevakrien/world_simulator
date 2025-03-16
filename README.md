@@ -21,7 +21,17 @@ class merchant extends economic_entity{
 	string name;
 }
 
-class road extends unordered<city,city>{
-	uint length;
+class road{
+	source city;
+	target city;
 }
+```
+
+rendering (expiremental)
+```
+
+render {
+	graph_render(nodes=city,edge_start = road.target,edge_end = road.end)
+}
+
 ```
