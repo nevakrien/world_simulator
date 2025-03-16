@@ -3,6 +3,20 @@ use std::collections::{HashSet,HashMap};
 
 //we assume 64bit word size
 pub type ClassID = u32;
+pub type PropertyID = u32;
+
+pub trait Registery<'code>{
+    fn get_class(&self,id:ClassID) -> Option<ClassMeta>;
+    fn get_type(&self,name:&str) -> Option<Type>;
+    fn get_property(&self,id:PropertyID) -> Option<Property>;
+
+    fn get_class_id(&self,name:&str) -> Option<ClassID>;
+    fn get_property_id(&self,name:&str) -> Option<PropertyID>;
+
+    fn get_class_and_name(&self,id:ClassID) -> Option<(ClassMeta,&'code str)>;
+    fn get_property_and_name(&self,id:PropertyID) -> Option<(Property,&'code str)>;
+}
+
 #[repr(u32)]
 #[derive(Debug,Clone,Copy,PartialEq,Eq,Hash)]
 pub enum Type{
@@ -108,13 +122,26 @@ mod tests {
     }
 }
 
+
 pub struct Property{
-	pub id: Type,
+	pub inner_type: Type,
 	pub source: ClassID,
 }
 
 pub struct ClassMeta{
-	pub parents: HashSet<ClassID>,
-	pub properties: HashMap<String,Property>,
+    pub parents: HashSet<ClassID>,
+
+    /// includes all possible classes this can be downcasted to
+	pub ancestors: HashSet<ClassID>,
+
+    /// properties that can be accessed via obj.name 
+	pub accessble_properties: HashMap<String,Property>,
+
+    /// properties where there is more than 1 correct interpetation for which to take
 	pub clashing_properties: HashMap<String,Vec<Property>>,
+
+    /// properties hidden behind another property with the same name 
+    /// this can happen when a class has a defined property that shares a name with a parents
+    /// in that case the parents property is shadowed in that class
+    pub shadowed_properties: HashMap<String,Vec<Property>>,
 }
