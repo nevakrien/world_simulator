@@ -19,6 +19,9 @@ pub trait TypeRegistery<'code>{
 
     }
 
+    fn get_cur_class_id(&self) -> ClassID;
+    fn get_cur_property_id(&self) -> PropertyID;
+
     fn get_class_id(&self,name:&str) -> Option<ClassID>;
     fn get_property_id(&self,name:&str,class:ClassID) -> Option<PropertyID>;
 
@@ -50,10 +53,7 @@ pub enum Type{
 impl Type{
     #[inline]
     pub fn is_valid(self) -> bool {
-        match self{
-            Type::Invalid => false,
-            _ => true,
-        }
+        !matches!(self,Type::Invalid)
     }
 }
 
@@ -173,7 +173,7 @@ pub struct InMemoryRegistry<'code> {
     next_property_id: PropertyID,
 }
 
-impl<'code> InMemoryRegistry<'code> {
+impl InMemoryRegistry<'_> {
     /// Creates a new empty registry
     pub fn new() -> Self {
         Self {
@@ -181,8 +181,8 @@ impl<'code> InMemoryRegistry<'code> {
             properties: HashMap::new(),
             class_names: HashMap::new(),
             property_names: HashMap::new(),
-            next_class_id: 1, // Starting IDs from 1, 0 could be reserved
-            next_property_id: 1,
+            next_class_id: 0,
+            next_property_id: 0,
         }
     }
 }
@@ -211,7 +211,7 @@ impl<'code> TypeRegistery<'code> for InMemoryRegistry<'code> {
         }
         
         let id = self.next_class_id;
-        self.next_class_id = self.next_class_id + 1;
+        self.next_class_id += 1;
         self.class_names.insert(name, id);
         id
     }
@@ -219,7 +219,7 @@ impl<'code> TypeRegistery<'code> for InMemoryRegistry<'code> {
     fn add_property_id(&mut self, name: &'code str,class:ClassID) -> PropertyID {
         
         let id = self.next_property_id;
-        self.next_property_id = self.next_property_id + 1;
+        self.next_property_id += 1;
         // self.property_names.insert(name, id);
         if self.property_names.entry(name)
         .or_default()
@@ -275,6 +275,8 @@ impl<'code> TypeRegistery<'code> for InMemoryRegistry<'code> {
     fn get_property_and_name(&self, id: PropertyID) -> Option<(&Property, &'code str)> {
         self.properties.get(&id).map(|(prop, name)| (prop, *name))
     }
+    fn get_cur_class_id(&self) -> ClassID { self.next_class_id }
+    fn get_cur_property_id(&self) -> PropertyID { self.next_property_id}
 }
 
 
@@ -400,6 +402,41 @@ impl<'code> ClassMeta<'code>{
     }
 }
 
+/// Helper function to create a property
+pub fn create_property<'a>(reg: &mut impl TypeRegistery<'a>, prop_name: &'a str, class_id: ClassID, prop_type: Type) -> Property {
+    let prop_id = reg.add_property_id(prop_name,class_id);
+    let property = Property {
+        id: prop_id,
+        inner_type: prop_type,
+        source: class_id,
+    };
+    reg.add_property(prop_id, property).unwrap();
+    property
+}
+
+/// Helper function to set up a class with properties
+pub fn setup_class<'a>(
+    reg: &mut impl TypeRegistery<'a>,
+    class_name: &'a str,
+    parents: HashSet<ClassID>,
+    properties: Vec<(&'a str, Type)>,
+) -> ClassID {
+    let class_id = reg.add_class_id(class_name);
+    
+    // Create the properties for this class
+    let mut props_map = HashMap::new();
+    for (prop_name, prop_type) in properties {
+        let property = create_property(reg, prop_name, class_id, prop_type);
+        props_map.insert(prop_name, property);
+    }
+    
+    // Create the class metadata
+    let class_meta = ClassMeta::new(reg, class_id, parents, props_map);
+    reg.add_class(class_id, class_meta).unwrap();
+    
+    class_id
+}
+
 #[cfg(test)]
 mod class_meta_tests {
     use super::*;
@@ -412,40 +449,7 @@ mod class_meta_tests {
     // 4. Property clashing (when inheriting properties with the same name from different sources)
     // 5. Multi-level inheritance (4+ levels deep)
     
-    // Helper function to create a property
-    fn create_property<'a>(reg: &mut InMemoryRegistry<'a>, prop_name: &'a str, class_id: ClassID, prop_type: Type) -> Property {
-        let prop_id = reg.add_property_id(prop_name,class_id);
-        let property = Property {
-            id: prop_id,
-            inner_type: prop_type,
-            source: class_id,
-        };
-        reg.add_property(prop_id, property).unwrap();
-        property
-    }
-    
-    // Helper function to set up a class with properties
-    fn setup_class<'a>(
-        reg: &mut InMemoryRegistry<'a>,
-        class_name: &'a str,
-        parents: HashSet<ClassID>,
-        properties: Vec<(&'a str, Type)>,
-    ) -> ClassID {
-        let class_id = reg.add_class_id(class_name);
-        
-        // Create the properties for this class
-        let mut props_map = HashMap::new();
-        for (prop_name, prop_type) in properties {
-            let property = create_property(reg, prop_name, class_id, prop_type);
-            props_map.insert(prop_name, property);
-        }
-        
-        // Create the class metadata
-        let class_meta = ClassMeta::new(reg, class_id, parents, props_map);
-        reg.add_class(class_id, class_meta).unwrap();
-        
-        class_id
-    }
+
     
     #[test]
     fn test_simple_inheritance() {
