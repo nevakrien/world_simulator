@@ -35,3 +35,9 @@ render {
 }
 
 ```
+
+# technical decsions
+it makes a lot of sense to use some sort of a qurying engine for runing the underlying representation.
+since that gives us parllalisem for free and all sorts of other niceties.
+
+unfortunatly they all take way too long to compile... so what we probably want with this is a setup where there is a subcrate that compiles a base data structure for us to use then the rest of the code just refrences it...

@@ -1,11 +1,6 @@
-// use duckdb::{Connection, Result as DuckResult};
 // use crate::types::{InMemoryRegistry,TypeRegistery,ClassID,ClassMeta,Property};
 
-// #[test]
-// fn db_connects() {
-// 	Connection::open_in_memory().unwrap();
-// 	Connection::open_in_memory().unwrap();
-// }
+
 
 // pub struct SimState<'code>{
 // 	pub reg:InMemoryRegistry<'code>,

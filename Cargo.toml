@@ -5,3 +5,9 @@ edition = "2021"
 
 [dependencies]
 # duckdb = { version = "1.2.1", features = ["bundled"] }
+
+# polars = { version = "0.46.0", default-features = false, features = [
+# 	"cross_join",
+#     "lazy",    # Enables lazy evaluation (better performance)
+#     #"performant",  # Enables SIMD & performance optimizations
+# ] }
