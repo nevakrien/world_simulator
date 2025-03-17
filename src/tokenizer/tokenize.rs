@@ -1,8 +1,7 @@
 use core::option::Option::None;
 
-use crate::tokenizer::error_types::TokenizerError;
-
 use super::error_reporter::ErrorReporter;
+use crate::tokenizer::error_types::TokenizerError;
 
 /// Represents the different token types supported by the tokenizer.
 #[derive(Debug, PartialEq)]
@@ -62,9 +61,6 @@ pub enum Token<'a> {
     // End-of-line and end-of-file markers
     EOL,
     EOF,
-
-    // (Optional) Comments – may be skipped in further processing.
-    Comment(&'a str),
 }
 
 /// Tokenizes the input source code into a stream of tokens.
@@ -81,24 +77,15 @@ pub enum Token<'a> {
 /// A vector of tokens representing the parsed input.
 #[allow(dead_code)]
 pub fn tokenize<'a>(input: &'a str, reporter: &mut ErrorReporter) -> Vec<Token<'a>> {
-    let mut tokens = Vec::new();
+    // Pre-reserve capacity to reduce reallocations.
+    let mut tokens = Vec::with_capacity(input.len() / 2);
     let mut chars = input.char_indices().peekable();
     let mut current_line = 1;
     let mut current_column = 1;
 
-    // Helper to update line and column positions.
-    fn update_position(c: char, line: &mut usize, column: &mut usize) {
-        if c == '\n' {
-            *line += 1;
-            *column = 1;
-        } else {
-            *column += 1;
-        }
-    }
-
     while let Some((i, c)) = chars.next() {
         match c {
-            // Skip spaces and tabs; update column counter.
+            // Skip spaces and tabs.
             ' ' | '\t' => {
                 current_column += 1;
             }
@@ -113,21 +100,19 @@ pub fn tokenize<'a>(input: &'a str, reporter: &mut ErrorReporter) -> Vec<Token<'
             '/' => {
                 if let Some(&(_, next)) = chars.peek() {
                     if next == '/' {
-                        // Single-line comment: consume until newline.
-                        chars.next(); // Consume second '/'
+                        // Single-line comment: simply skip characters until newline.
+                        chars.next(); // Consume the second '/'
                         current_column += 2;
-                        let _start = i;
                         while let Some(&(_, ch)) = chars.peek() {
                             if ch == '\n' {
                                 break;
                             }
                             chars.next();
+                            current_column += 1;
                         }
-                        // Optionally, add the comment as a token.
-                        // tokens.push(Token::Comment(&input[start..i]));
-                        continue;
+                        continue; // Skip adding any token.
                     } else if next == '*' {
-                        // Multi-line comment with nesting.
+                        // Multi-line comment with nesting: skip entire comment block.
                         chars.next(); // Consume '*'
                         current_column += 2;
                         let comment_start_line = current_line;
@@ -140,7 +125,7 @@ pub fn tokenize<'a>(input: &'a str, reporter: &mut ErrorReporter) -> Vec<Token<'
                             } else {
                                 current_column += 1;
                             }
-                            // If we see a new "/*", increase nesting depth.
+                            // Increase nesting when "/*" is encountered.
                             if ch == '/' {
                                 if let Some(&(_, next_ch)) = chars.peek() {
                                     if next_ch == '*' {
@@ -150,7 +135,7 @@ pub fn tokenize<'a>(input: &'a str, reporter: &mut ErrorReporter) -> Vec<Token<'
                                     }
                                 }
                             }
-                            // If we see "*/", decrease nesting depth.
+                            // Decrease nesting when "*/" is encountered.
                             else if ch == '*' {
                                 if let Some(&(_, next_ch)) = chars.peek() {
                                     if next_ch == '/' {
@@ -164,17 +149,17 @@ pub fn tokenize<'a>(input: &'a str, reporter: &mut ErrorReporter) -> Vec<Token<'
                                 }
                             }
                         }
-                        // If the depth is not zero, then the comment was not properly closed.
+                        // If comment was not properly closed, report an error.
                         if depth != 0 {
                             reporter.add_error(TokenizerError::InvalidNestedComment(
                                 comment_start_line,
                                 comment_start_column,
                             ));
                         }
-                        continue;
+                        continue; // Skip producing a comment token.
                     }
                 }
-                // Handle '/' operator (or compound '/=' below).
+                // Handle '/' operator (or compound '/=' operator) normally.
                 if let Some(&(_, next)) = chars.peek() {
                     if next == '=' {
                         chars.next();
@@ -189,7 +174,7 @@ pub fn tokenize<'a>(input: &'a str, reporter: &mut ErrorReporter) -> Vec<Token<'
 
             // String literal handling.
             '"' => {
-                current_column += 1; // opening quote
+                current_column += 1; // Consume opening quote.
                 let string_start_line = current_line;
                 let string_start_column = current_column;
                 let mut string_literal = String::new();
@@ -203,7 +188,7 @@ pub fn tokenize<'a>(input: &'a str, reporter: &mut ErrorReporter) -> Vec<Token<'
                                 '\\' => string_literal.push('\\'),
                                 'n' => string_literal.push('\n'),
                                 't' => string_literal.push('\t'),
-                                _ => string_literal.push(esc),
+                                other => string_literal.push(other),
                             }
                             current_column += 2;
                         } else {
