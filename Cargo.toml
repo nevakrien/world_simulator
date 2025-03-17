@@ -4,6 +4,8 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+colored = "3.0.0"
+enable-ansi-support = "0.2.1"
 # duckdb = { version = "1.2.1", features = ["bundled"] }
 
 # polars = { version = "0.46.0", default-features = false, features = [
